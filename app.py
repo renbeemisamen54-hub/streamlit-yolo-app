@@ -35,8 +35,7 @@ def video_frame_callback(frame):
 # Start WebRTC streamer
 webrtc_streamer(
     key="object-detection",
-    video_frame_callback=video_frame_callback,
-    async_processing=True,  # smoother performance
+    video_frame_callback=callback, # Siguraduhin na ito ang pangalan ng function mo
     rtc_configuration={
         "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
     },
