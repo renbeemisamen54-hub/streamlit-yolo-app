@@ -35,7 +35,7 @@ def my_video_callback(frame):
 # 2. Dito natin tinatawag ang function (dapat parehas ang pangalan)
 webrtc_streamer(
     key="object-detection",
-    video_frame_callback=my_video_callback, # Inayos ko para magtugma sila sa itaas
+    video_frame_callback=my_video_callback,
     rtc_configuration={
         "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
     },
