@@ -14,8 +14,8 @@ model = load_model()
 st.title("🎥 Live Object Detection & Tracing")
 st.write("Point your camera at objects to identify them in real-time.")
 
-# Video frame callback
-def video_frame_callback(frame):
+# 1. Dito natin ni-define ang function
+def my_video_callback(frame):
     img = frame.to_ndarray(format="bgr24")
 
     # Run YOLOv8 tracking
@@ -32,10 +32,10 @@ def video_frame_callback(frame):
     return av.VideoFrame.from_ndarray(annotated_frame, format="bgr24")
 
 
-# Start WebRTC streamer
+# 2. Dito natin tinatawag ang function (dapat parehas ang pangalan)
 webrtc_streamer(
     key="object-detection",
-    video_frame_callback=callback, # Siguraduhin na ito ang pangalan ng function mo
+    video_frame_callback=my_video_callback, # Inayos ko para magtugma sila sa itaas
     rtc_configuration={
         "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
     },
