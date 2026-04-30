@@ -1,5 +1,0 @@
-streamlit
-ultralytics
-streamlit-webrtc
-opencv-python-headless
-av
