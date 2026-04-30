@@ -1,8 +1,13 @@
 import streamlit as st
-from streamlit_webrtc import webrtc_streamer
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 from ultralytics import YOLO
 import av
 import cv2
+
+# Define the RTC configuration for STUN servers (Critical for Cloud)
+RTC_CONFIGURATION = RTCConfiguration(
+    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+)
 
 # Cache the model so it doesn't reload every rerun
 @st.cache_resource
@@ -19,6 +24,7 @@ def video_frame_callback(frame):
     img = frame.to_ndarray(format="bgr24")
 
     # Run YOLOv8 tracking
+    # Use persist=True to keep track of objects across frames
     results = model.track(
         img,
         persist=True,
@@ -31,12 +37,12 @@ def video_frame_callback(frame):
 
     return av.VideoFrame.from_ndarray(annotated_frame, format="bgr24")
 
-
 # Start WebRTC streamer
 webrtc_streamer(
     key="object-detection",
-    rtc_configuration={
-        "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
-    },
+    mode=WebRtcMode.SENDRECV, # Explicitly set mode
+    rtc_configuration=RTC_CONFIGURATION,
+    video_frame_callback=video_frame_callback,
     media_stream_constraints={"video": True, "audio": False},
+    async_processing=True,
 )
