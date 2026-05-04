@@ -1,0 +1,2 @@
+libg11
+libgomp1
