@@ -2,8 +2,8 @@ import streamlit as st
 from streamlit_webrtc import webrtc_streamer, WebRtcMode
 from ultralytics import YOLO
 import av
-import cv2
 
+# Cache the model
 @st.cache_resource
 def load_model():
     return YOLO("yolov8n.pt")
@@ -11,7 +11,6 @@ def load_model():
 model = load_model()
 
 st.title("🎥 Live Object Detection & Tracing")
-st.write("Point your camera at objects to identify them in real-time.")
 
 def video_frame_callback(frame):
     img = frame.to_ndarray(format="bgr24")
@@ -21,11 +20,11 @@ def video_frame_callback(frame):
 
 webrtc_streamer(
     key="object-detection",
-    mode=WebRtcMode.SENDRECV, # Add this line
+    mode=WebRtcMode.SENDRECV,
     video_frame_callback=video_frame_callback,
+    media_stream_constraints={"video": True, "audio": False},
     async_processing=True,
     rtc_configuration={
         "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
-    },
-    media_stream_constraints={"video": True, "audio": False},
+    }
 )
