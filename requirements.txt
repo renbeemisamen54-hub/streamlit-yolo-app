@@ -1,5 +1,6 @@
-streamlit
-ultralytics==8.0.20
+streamlit>=1.22.0
+ultralytics
 opencv-python-headless
-streamlit-webrtc
+streamlit-webrtc==0.47.1
 av
+tornado==6.2
