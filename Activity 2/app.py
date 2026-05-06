@@ -1,97 +1,110 @@
 import streamlit as st
-from streamlit_webrtc import webrtc_streamer
+from streamlit_webrtc import webrtc_streamer, WebRtcMode
 from ultralytics import YOLO
 import av
 import cv2
-import datetime
 import os
+import time
+import threading
 
-# --- PAGE CONFIG ---
-st.set_page_config(page_title="VisionAI Pro", layout="wide")
+# --- CONFIG & STYLING ---
+st.set_page_config(page_title="VisionAI Pro", layout="wide", page_icon="🚀")
 
-# Ensure a directory exists for saved snapshots
+st.markdown("""
+    <style>
+    .main { background-color: #0e1117; }
+    .stMetric { background-color: #1e2130; padding: 15px; border-radius: 10px; border: 1px solid #3e4251; }
+    </style>
+    """, unsafe_allow_html=True)
+
 if not os.path.exists("snapshots"):
     os.makedirs("snapshots")
 
-# Cache the model
+# --- MODEL LOADING ---
 @st.cache_resource
 def load_model():
     return YOLO("yolov8n.pt")
 
 model = load_model()
 
-# --- SIDEBAR UI ---
-with st.sidebar:
-    st.header("⚙️ Settings")
-    conf_threshold = st.slider("Confidence Threshold", 0.0, 1.0, 0.5, 0.05)
-    selected_class = st.selectbox("Alert for Specific Object", 
-                                  ["None", "person", "cell phone", "laptop", "bottle"])
-    
-    st.info("Snapshots are saved to the /snapshots folder.")
-    if st.button("🗑️ Clear Saved Images"):
-        for f in os.listdir("snapshots"):
-            os.remove(os.path.join("snapshots", f))
-        st.success("Cleared!")
+# --- SHARED STATE ---
+# We use a Lock and a dictionary to pass data from the video thread to the UI
+lock = threading.Lock()
+img_container = {"img": None, "count": 0, "alert": False}
 
-# --- MAIN UI ---
-st.title("🎥 VisionAI: Real-time Analytics")
-col1, col2 = st.columns([3, 1])
-
-with col2:
-    st.subheader("📊 Live Analytics")
-    count_placeholder = st.empty()
-    alert_placeholder = st.empty()
-    snapshot_placeholder = st.empty()
-
-# --- APP LOGIC ---
 def video_frame_callback(frame):
     img = frame.to_ndarray(format="bgr24")
-
-    # Run YOLOv8 tracking
+    
+    # Inference
     results = model.track(img, persist=True, conf=conf_threshold, verbose=False)
-    
-    # 1. Object Counting Logic
-    current_count = len(results[0].boxes) if results[0].boxes else 0
-    
-    # 2. Specific Alert Logic
-    alert_triggered = False
-    if selected_class != "None":
-        names = model.names
-        for box in results[0].boxes:
-            cls_id = int(box.cls[0])
-            if names[cls_id] == selected_class:
-                alert_triggered = True
-                break
-
-    # Annotate frame
     annotated_frame = results[0].plot()
 
-    # Update UI Components (Side-channel to avoid blocking video)
-    count_placeholder.metric("Objects Detected", current_count)
-    
-    if alert_triggered:
-        alert_placeholder.error(f"⚠️ {selected_class.upper()} DETECTED!")
-    else:
-        alert_placeholder.empty()
+    # Thread-safe data update
+    with lock:
+        img_container["img"] = annotated_frame
+        img_container["count"] = len(results[0].boxes) if results[0].boxes else 0
+        
+        # Alert Check
+        if selected_class != "None":
+            names = model.names
+            img_container["alert"] = any(names[int(box.cls[0])] == selected_class for box in results[0].boxes)
+        else:
+            img_container["alert"] = False
 
     return av.VideoFrame.from_ndarray(annotated_frame, format="bgr24")
 
-with col1:
-    ctx = webrtc_streamer(
-        key="object-detection",
+# --- SIDEBAR ---
+with st.sidebar:
+    st.title("🚀 VisionAI Pro")
+    st.subheader("Model Settings")
+    conf_threshold = st.slider("Sensitivity", 0.0, 1.0, 0.45)
+    selected_class = st.selectbox("Target Alert", ["None"] + list(model.names.values()))
+    
+    st.divider()
+    if st.button("🗑️ Purge Snapshots", use_container_width=True):
+        for f in os.listdir("snapshots"): os.remove(os.path.join("snapshots", f))
+        st.success("Gallery Cleared!")
+
+# --- MAIN LAYOUT ---
+col_vid, col_stats = st.columns([2, 1])
+
+with col_vid:
+    webrtc_streamer(
+        key="vision-pro",
+        mode=WebRtcMode.SENDRECV,
         video_frame_callback=video_frame_callback,
-        async_processing=True,
-        rtc_configuration={
-            "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
-        },
         media_stream_constraints={"video": True, "audio": False},
+        async_processing=True,
     )
 
-    # 3. Save Detected Frame (Manual Snapshot)
-    if ctx.state.playing:
-        if st.button("📸 Take Snapshot"):
-            # Note: In a real WebRTC setup, you'd pull the latest frame from a queue
-            # For this simple version, we'll notify the user where to find it.
-            timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-            # This is a placeholder for the logic to grab the current state
-            st.toast(f"Snapshot feature active! Check /snapshots folder.", icon="📸")
+with col_stats:
+    st.subheader("📊 Live Intelligence")
+    
+    # High-frequency UI updates
+    metric_spot = st.empty()
+    alert_spot = st.empty()
+    snap_btn = st.button("📸 Capture Moment", use_container_width=True)
+    
+    # This loop keeps the UI reactive to the video thread
+    while True:
+        with lock:
+            count = img_container["count"]
+            is_alert = img_container["alert"]
+            current_img = img_container["img"]
+
+        # Update Statistics
+        metric_spot.metric("Objects in View", count)
+        
+        if is_alert:
+            alert_spot.error(f"🚨 TARGET DETECTED: {selected_class.upper()}")
+        else:
+            alert_spot.info("✅ Surveillance Active")
+
+        # Snapshot Logic
+        if snap_btn and current_img is not None:
+            fn = f"snapshots/snap_{int(time.time())}.jpg"
+            cv2.imwrite(fn, current_img)
+            st.toast(f"Saved to {fn}!", icon="💾")
+            snap_btn = False # Reset pseudo-trigger
+            
+        time.sleep(0.1) # Prevent CPU spiking
